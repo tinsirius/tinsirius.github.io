@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discrete-time LQR phase plot</title>
+
+<script src="https://cdn.bokeh.org/bokeh/release/bokeh-3.9.2.min.js"></script>
+<script src="https://cdn.bokeh.org/bokeh/release/bokeh-api-3.9.2.min.js"></script>
+
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --plane: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --border: rgba(11, 11, 11, 0.10);
+    --gridline: #e1e0d9;
+    --series-1: #2a78d6;
+    --critical: #d03b3b;
+    --good: #006300;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 32px 24px;
+    background: var(--plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .layout {
+    max-width: 1140px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .hint {
+    display: block;
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--plane);
+    color: var(--text-primary);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+
+  input[type="text"]:focus {
+    outline: 2px solid var(--series-1);
+    outline-offset: -1px;
+    border-color: var(--series-1);
+  }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--series-1);
+    margin: 4px 0 0;
+  }
+
+  [hidden] { display: none !important; }
+
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0;
+    cursor: pointer;
+  }
+
+  .check-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--series-1);
+    cursor: pointer;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  #N-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--series-1);
+  }
+
+  .status {
+    margin-top: 20px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .status--ok { color: var(--good); background: rgba(12, 163, 12, 0.08); }
+  .status--error { color: var(--critical); background: rgba(208, 59, 59, 0.08); }
+
+  .plot-column {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+  }
+
+  .plot-panel { padding: 12px; overflow-x: auto; }
+  #phase-plot { min-height: 500px; }
+  #cost-plot { min-height: 320px; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <div class="panel">
+    <div class="field">
+      <label for="input-A">A — state matrix
+        <span class="hint">rows separated by <code>;</code>, e.g. <code>[1, 0.1; 0, 1]</code></span>
+      </label>
+      <input type="text" id="input-A" value="[1, 0.1; 0, 1]" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="input-B">B — input matrix
+        <span class="hint">column vector, e.g. <code>[0.005; 0.1]</code></span>
+      </label>
+      <input type="text" id="input-B" value="[0.005; 0.1]" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="input-Q">Q — stage state cost
+        <span class="hint">square, e.g. <code>[1, 0; 0, 1]</code></span>
+      </label>
+      <input type="text" id="input-Q" value="[1, 0; 0, 1]" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="input-Qf">Q<sub>f</sub> — terminal cost
+        <span class="hint">square, e.g. <code>[20, 0; 0, 20]</code></span>
+      </label>
+      <input type="text" id="input-Qf" value="[20, 0; 0, 20]" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="input-R">R — input cost
+        <span class="hint">scalar, e.g. <code>1.0</code></span>
+      </label>
+      <input type="text" id="input-R" value="1.0" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="input-x0">x<sub>0</sub> — initial state
+        <span class="hint">two entries, e.g. <code>[1, 1]</code></span>
+      </label>
+      <input type="text" id="input-x0" value="[1, 1]" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="input-Nmax">N<sub>max</sub> — largest horizon solved
+        <span class="hint">positive integer</span>
+      </label>
+      <input type="text" id="input-Nmax" value="50" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="input-N">
+        <span class="slider-row">
+          <span>N — horizon</span>
+          <span id="N-value">50</span>
+        </span>
+      </label>
+      <input type="range" id="input-N" min="1" max="25" step="1" value="50">
+    </div>
+
+    <div class="field">
+      <label class="check-row" for="input-penalize">
+        <input type="checkbox" id="input-penalize">
+        <span>Penalize N</span>
+      </label>
+      <span class="hint">charges &alpha; per step, so the cost becomes x<sub>0</sub><sup>T</sup>Px<sub>0</sub> + &alpha;N</span>
+    </div>
+
+    <div class="field" id="alpha-field" hidden>
+      <label for="input-alpha">&alpha; — cost per step
+        <span class="hint">positive number, e.g. <code>0.5</code></span>
+      </label>
+      <input type="text" id="input-alpha" value="0.5" spellcheck="false">
+    </div>
+
+    <div class="status status--ok" id="status">OK</div>
+  </div>
+
+  <div class="plot-column">
+    <div class="panel plot-panel">
+      <div id="phase-plot"></div>
+    </div>
+    <div class="panel plot-panel">
+      <div id="cost-plot"></div>
+    </div>
+  </div>
+</div>
+
+<script src="dist/linalg.js"></script>
+<script src="dist/main.js"></script>
+</body>
+</html>
