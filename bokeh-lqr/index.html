@@ -25,42 +25,56 @@
 
   * { box-sizing: border-box; }
 
+  html, body { height: 100%; }
+
   body {
     margin: 0;
-    padding: 32px 24px;
+    padding: 0;
     background: var(--plane);
     color: var(--text-primary);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 13px;
+    line-height: 1.45;
+    /* Letterbox the whole app into one 16:9 frame — nothing scrolls. */
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .layout {
-    max-width: 1140px;
-    margin: 0 auto;
+    /* Both axes are pinned so the frame is exactly 16:9 regardless of content;
+       `aspect-ratio` alone loses to a tall control column and overflows. */
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    /* Type and spacing scale with the frame, so the controls fit at 720p as
+       well as 1440p. Everything below is sized in em against this. */
+    font-size: clamp(10px, 1.35vh, 14px);
+    padding: 1.15em;
     display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
-    gap: 24px;
-    align-items: start;
-  }
-
-  @media (max-width: 900px) {
-    .layout { grid-template-columns: minmax(0, 1fr); }
+    grid-template-columns: 21.5em minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 1.15em;
+    align-items: stretch;
   }
 
   .panel {
     background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 20px;
+    padding: 1.05em;
+    min-height: 0;
   }
 
-  .field { margin-bottom: 16px; }
+  /* Controls column: scrolls internally only if the frame is unusually short. */
+  .layout > .panel { overflow-y: auto; }
+
+  .field { margin-bottom: 0.72em; }
   .field:last-child { margin-bottom: 0; }
 
   label {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 0.25em;
     font-weight: 600;
     color: var(--text-primary);
   }
@@ -68,20 +82,20 @@
   .hint {
     display: block;
     font-weight: 400;
-    font-size: 12px;
+    font-size: 0.85em;
     color: var(--text-muted);
-    margin-top: 2px;
+    margin-top: 0.1em;
   }
 
   input[type="text"] {
     width: 100%;
-    padding: 8px 10px;
+    padding: 0.5em 0.65em;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--plane);
     color: var(--text-primary);
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 13px;
+    font-size: 0.95em;
   }
 
   input[type="text"]:focus {
@@ -93,7 +107,7 @@
   input[type="range"] {
     width: 100%;
     accent-color: var(--series-1);
-    margin: 4px 0 0;
+    margin: 0.25em 0 0;
   }
 
   [hidden] { display: none !important; }
@@ -101,14 +115,14 @@
   .check-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0.55em;
     margin-bottom: 0;
     cursor: pointer;
   }
 
   .check-row input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
+    width: 1.15em;
+    height: 1.15em;
     margin: 0;
     accent-color: var(--series-1);
     cursor: pointer;
@@ -118,7 +132,7 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 8px;
+    gap: 0.55em;
   }
 
   #N-value {
@@ -128,10 +142,10 @@
   }
 
   .status {
-    margin-top: 20px;
-    padding: 8px 10px;
+    margin-top: 0.85em;
+    padding: 0.5em 0.65em;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 0.9em;
   }
 
   .status--ok { color: var(--good); background: rgba(12, 163, 12, 0.08); }
@@ -140,13 +154,41 @@
   .plot-column {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 1.15em;
     min-width: 0;
+    min-height: 0;
   }
 
-  .plot-panel { padding: 12px; overflow-x: auto; }
-  #phase-plot { min-height: 500px; }
-  #cost-plot { min-height: 320px; }
+  /* Plots share the column's height ~60/40 instead of using fixed pixels. */
+  .plot-panel {
+    padding: 0.6em;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .plot-panel:nth-of-type(1) { flex: 3 1 0; }
+  .plot-panel:nth-of-type(2) { flex: 2 1 0; }
+
+  #phase-plot, #cost-plot { width: 100%; height: 100%; }
+
+  /* Narrow or tall screens: fall back to a normal scrolling page. */
+  @media (max-width: 900px), (max-aspect-ratio: 1 / 1) {
+    body { overflow: auto; display: block; }
+    .layout {
+      width: 100%;
+      max-width: 1140px;
+      margin: 0 auto;
+      height: auto;
+      font-size: 14px;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+      padding: 1.4em;
+    }
+    .layout > .panel { overflow-y: visible; }
+    .plot-panel:nth-of-type(1), .plot-panel:nth-of-type(2) { flex: none; }
+    #phase-plot { height: 460px; }
+    #cost-plot { height: 300px; }
+  }
 </style>
 </head>
 <body>

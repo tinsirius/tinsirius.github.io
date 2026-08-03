@@ -169,7 +169,8 @@ function makeFigure(opts: Record<string, unknown>): any {
     Object.assign(
       {
         toolbar_location: "above",
-        sizing_mode: "stretch_width",
+        // Fills whatever box the CSS gives it, so the 16:9 frame drives sizing.
+        sizing_mode: "stretch_both",
         background_fill_color: SURFACE,
         border_fill_color: SURFACE,
       },
@@ -227,7 +228,6 @@ async function renderPhasePlot(
   const fig = makeFigure({
     title: title,
     tools: [hover, "pan", "wheel_zoom", "box_zoom", "reset", "save"],
-    height: 500,
     x_axis_label: "Position",
     y_axis_label: "Velocity",
     x_range: new Bokeh.Range1d({ start: -5, end: 5 }),
@@ -282,7 +282,6 @@ async function renderCostPlot(
       ? "Total cost vs horizon — x₀ᵀPₖx₀ + αN, so each extra step is charged for"
       : "Cost-to-go vs horizon — Pₖ from one sweep solves the horizon-(Nₘₐₓ−k) problem",
     tools: [hover, "pan", "wheel_zoom", "box_zoom", "reset", "save"],
-    height: 320,
     x_axis_label: "Horizon N",
     y_axis_label: penalized ? "Total cost x₀ᵀPx₀ + αN" : "Cost-to-go x₀ᵀPx₀",
   });

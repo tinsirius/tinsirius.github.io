@@ -128,7 +128,8 @@ const SERIES_2 = "#eb6834"; // categorical slot 2 — the selected horizon
 function makeFigure(opts) {
     const fig = Bokeh.Plotting.figure(Object.assign({
         toolbar_location: "above",
-        sizing_mode: "stretch_width",
+        // Fills whatever box the CSS gives it, so the 16:9 frame drives sizing.
+        sizing_mode: "stretch_both",
         background_fill_color: SURFACE,
         border_fill_color: SURFACE,
     }, opts));
@@ -174,7 +175,6 @@ async function renderPhasePlot(xs, ys, steps, title) {
     const fig = makeFigure({
         title: title,
         tools: [hover, "pan", "wheel_zoom", "box_zoom", "reset", "save"],
-        height: 500,
         x_axis_label: "Position",
         y_axis_label: "Velocity",
         x_range: new Bokeh.Range1d({ start: -5, end: 5 }),
@@ -213,10 +213,12 @@ async function renderCostPlot(horizons, costs, selectedN, selectedCost, penalize
         mode: "vline",
     });
     const fig = makeFigure({
+        title: penalized
+            ? "Total cost vs horizon — x₀ᵀPₖx₀ + αN, so each extra step is charged for"
+            : "Cost-to-go vs horizon — Pₖ from one sweep solves the horizon-(Nₘₐₓ−k) problem",
         tools: [hover, "pan", "wheel_zoom", "box_zoom", "reset", "save"],
-        height: 320,
         x_axis_label: "Horizon N",
-        y_axis_label: penalized ? "x₀ᵀPx₀ + αN" : "x₀ᵀPx₀",
+        y_axis_label: penalized ? "Total cost x₀ᵀPx₀ + αN" : "Cost-to-go x₀ᵀPx₀",
     });
     fig.line({ field: "n" }, { field: "j" }, {
         source: curve,
@@ -341,8 +343,8 @@ function update(inputs) {
         const penalty = alpha * N;
         const cost = baseCost + penalty;
         const title = penalized
-            ? `J(x₀) = x₀ᵀP₀x₀ + αN = ${baseCost.toFixed(4)} + ${penalty.toFixed(4)} = ${cost.toFixed(4)}`
-            : `J(x₀) = x₀ᵀP₀x₀ = ${cost.toFixed(4)}`;
+            ? `Phase plot — J(x₀) = x₀ᵀP₀x₀ + αN = ${baseCost.toFixed(4)} + ${penalty.toFixed(4)} = ${cost.toFixed(4)}`
+            : `Phase plot — cost-to-go J(x₀) = x₀ᵀP₀x₀ = ${cost.toFixed(4)}`;
         renderPhasePlot(positions, velocities, steps, title);
         renderCostPlot(horizons, costs, N, cost, penalized);
         setStatus("OK", false);
