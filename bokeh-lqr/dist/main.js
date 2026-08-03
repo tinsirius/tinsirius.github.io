@@ -208,17 +208,17 @@ async function renderCostPlot(horizons, costs, selectedN, selectedCost, penalize
     const hover = new Bokeh.HoverTool({
         tooltips: [
             ["horizon N", "@n"],
-            [penalized ? "total cost" : "cost-to-go", "@j{0.0000}"],
+            [penalized ? "cost" : "cost", "@j{0.0000}"],
         ],
         mode: "vline",
     });
     const fig = makeFigure({
         title: penalized
-            ? "Total cost vs horizon — x₀ᵀPₖx₀ + αN, so each extra step is charged for"
-            : "Cost-to-go vs horizon — Pₖ from one sweep solves the horizon-(Nₘₐₓ−k) problem",
+            ? ""
+            : "",
         tools: [hover, "pan", "wheel_zoom", "box_zoom", "reset", "save"],
         x_axis_label: "Horizon N",
-        y_axis_label: penalized ? "Total cost x₀ᵀPx₀ + αN" : "Cost-to-go x₀ᵀPx₀",
+        y_axis_label: penalized ? "x₀ᵀPx₀ + αN" : "x₀ᵀPx₀",
     });
     fig.line({ field: "n" }, { field: "j" }, {
         source: curve,
@@ -343,8 +343,8 @@ function update(inputs) {
         const penalty = alpha * N;
         const cost = baseCost + penalty;
         const title = penalized
-            ? `Phase plot — J(x₀) = x₀ᵀP₀x₀ + αN = ${baseCost.toFixed(4)} + ${penalty.toFixed(4)} = ${cost.toFixed(4)}`
-            : `Phase plot — cost-to-go J(x₀) = x₀ᵀP₀x₀ = ${cost.toFixed(4)}`;
+            ? `J(x₀) = x₀ᵀP₀x₀ + αN = ${baseCost.toFixed(4)} + ${penalty.toFixed(4)} = ${cost.toFixed(4)}`
+            : `J(x₀) = x₀ᵀP₀x₀ = ${cost.toFixed(4)}`;
         renderPhasePlot(positions, velocities, steps, title);
         renderCostPlot(horizons, costs, N, cost, penalized);
         setStatus("OK", false);
