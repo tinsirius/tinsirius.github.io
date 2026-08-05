@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es2017",
+    "module": "none",
+    "outFile": "dist/app.js",
+    "lib": ["es2017", "dom"],
+    "strict": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": false,
+    "removeComments": false,
+    "sourceMap": true
+  },
+  "files": [
+    "src/linalg.ts",
+    "src/model.ts",
+    "src/ilqr.ts",
+    "src/plots.ts",
+    "src/main.ts"
+  ]
+}

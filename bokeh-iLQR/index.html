@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>iLQR driving</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --plane: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --gridline: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-1: #2a78d6;   /* planned trajectory, cost, controls */
+    --series-2: #eb6834;   /* target circle */
+    --critical: #d03b3b;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    padding: 14px 18px 16px;
+    background: var(--plane);
+    color: var(--text-primary);
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;               /* the 16:9 view fits without scrolling */
+  }
+
+  /* Top bar --------------------------------------------------------- */
+  .topbar { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  .topbar p { margin: 0; color: var(--text-secondary); font-size: 12px; }
+  .topbar .spacer { flex: 1; }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 11px 13px;
+  }
+
+  /* Setup ----------------------------------------------------------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 9px 13px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 11px; color: var(--text-secondary); }
+  .field input {
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 5px 8px;
+    color: var(--text-primary);
+    background: var(--plane);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+  }
+  .field input:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  #x0-input { width: 186px; }
+  .field.narrow input { width: 74px; }
+  button {
+    font: inherit; font-weight: 500;
+    padding: 6px 14px;
+    color: #ffffff;
+    background: var(--series-1);
+    border: 0; border-radius: 5px; cursor: pointer;
+  }
+  button.ghost {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  button:hover { filter: brightness(1.07); }
+  button.ghost:hover { background: var(--plane); filter: none; }
+  button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+
+  #error-box { display: none; margin-top: 8px; font-size: 12px; color: var(--critical); }
+  #error-box.visible { display: block; }
+  #status-box {
+    font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums;
+  }
+
+  .slider-row {
+    display: flex; align-items: center; gap: 11px;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--gridline);
+  }
+  .slider-row label { font-size: 12px; color: var(--text-secondary); }
+  .slider-row input[type="range"] { flex: 1; min-width: 100px; accent-color: var(--series-1); }
+  .slider-row .ends { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .iter-value {
+    font-variant-numeric: tabular-nums; font-weight: 600;
+    min-width: 3ch; text-align: right;
+  }
+
+  /* Chart grid ------------------------------------------------------ */
+  .charts {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .right-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .charts .card { display: flex; flex-direction: column; min-height: 0; padding: 9px 12px 7px; }
+  .right-col .card { flex: 1 1 0; }
+
+  .card-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .card-head h2 { font-size: 12.5px; font-weight: 600; margin: 0; }
+  .card-head .sub { font-size: 11px; color: var(--text-secondary); }
+
+  .chart-body { position: relative; flex: 1 1 auto; min-height: 0; margin-top: 4px; }
+  .chart-body svg { position: absolute; inset: 0; display: block; }
+
+  .grid line { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .zero-line { stroke: var(--baseline); stroke-width: 1; }
+  text.tick { fill: var(--text-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  text.axis-title { fill: var(--text-secondary); font-size: 10.5px; }
+  text.direct-label { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  .target-circle { fill: none; stroke: var(--series-2); stroke-width: 2; }
+  .traj-line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .traj-knots circle { fill: var(--series-1); }
+  .car-body { fill: none; stroke: var(--baseline); stroke-width: 1; }
+  .traj-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  .traj-dot.start { fill: var(--text-muted); }
+
+  .cost-line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .cost-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  .crosshair { stroke: var(--baseline); stroke-width: 1; }
+  .hover-crosshair { stroke: var(--text-muted); stroke-width: 1; }
+  .hover-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+
+  .legend { display: flex; gap: 15px; margin-top: 5px; font-size: 11px; color: var(--text-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .key { width: 13px; height: 2px; border-radius: 1px; }
+  .key.circle { background: var(--series-2); }
+  .key.traj { background: var(--series-1); }
+  .key.car { background: var(--baseline); }
+
+  .chart-tooltip {
+    position: absolute; pointer-events: none; opacity: 0;
+    transition: opacity 90ms ease;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 9px;
+    font-size: 11.5px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.12);
+    min-width: 150px;
+    z-index: 5;
+  }
+  .chart-tooltip.visible { opacity: 1; }
+  .tt-title { font-weight: 600; margin-bottom: 3px; }
+  .tt-row { display: flex; justify-content: space-between; gap: 14px; color: var(--text-secondary); }
+  .tt-row b { color: var(--text-primary); font-variant-numeric: tabular-nums; font-weight: 500; }
+
+  /* Overlay panels -------------------------------------------------- */
+  .panel {
+    position: fixed; inset: 0;
+    background: rgba(11, 11, 11, 0.28);
+    display: none; align-items: center; justify-content: center;
+    z-index: 20;
+  }
+  .panel.visible { display: flex; }
+  .panel-inner {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: min(880px, 92vw);
+    max-height: 84vh;
+    display: flex; flex-direction: column;
+    padding: 16px 18px;
+  }
+  .panel-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .panel-head h2 { font-size: 14px; margin: 0; font-weight: 600; }
+  .panel-head .spacer { flex: 1; }
+  .tables { display: grid; grid-template-columns: 1fr 1.25fr; gap: 18px; overflow: hidden; min-height: 0; }
+  .table-scroll { overflow: auto; max-height: 62vh; }
+  .table-scroll h3 { font-size: 11.5px; font-weight: 600; margin: 0 0 6px; color: var(--text-secondary); }
+  table { border-collapse: collapse; width: 100%; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--gridline); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    position: sticky; top: 0; background: var(--surface-1);
+    color: var(--text-secondary); font-weight: 500;
+  }
+
+  /* Math panel ------------------------------------------------------ */
+  .math-scroll { overflow: auto; max-height: 68vh; padding-right: 6px; }
+  .math-block { padding: 0 0 4px; }
+  .math-block + .math-block {
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--gridline);
+  }
+  .math-block h3 {
+    font-size: 11.5px; font-weight: 600; margin: 0 0 8px;
+    color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .math-block math { font-size: 16px; margin: 8px 0; color: var(--text-primary); }
+  .math-block math[display="block"] { overflow-x: auto; overflow-y: hidden; }
+  .math-block mtable { padding: 0 0.15em; }
+  .math-block .note { font-size: 12px; color: var(--text-secondary); margin: 8px 0 4px; }
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.94em; color: var(--text-primary);
+  }
+
+  .legend-list, .term-list {
+    list-style: none; margin: 8px 0 0; padding: 0;
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .legend-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px 16px; }
+  .legend-list b, .term-list b { color: var(--text-primary); font-weight: 600; }
+  .term-list li { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .term-num {
+    flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--plane); border: 1px solid var(--border);
+    font-size: 10px; color: var(--text-secondary);
+  }
+
+  .param-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px 14px; font-size: 12px;
+  }
+  .param-grid div {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 5px 9px; background: var(--plane);
+    border: 1px solid var(--border); border-radius: 5px;
+  }
+  .param-grid span { color: var(--text-secondary); }
+  .param-grid b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Anything that is not roughly 16:9 gets a scrolling stacked layout. */
+  @media (max-width: 900px), (max-height: 560px) {
+    body { overflow: auto; height: auto; }
+    .charts { grid-template-columns: minmax(0, 1fr); }
+    .charts .card { min-height: 260px; }
+    .traj-card { min-height: 420px; }
+    .tables { grid-template-columns: 1fr; }
+    .legend-list { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>iLQR driving</h1>
+    <p>Drive a bicycle-model car onto a circle.</p>
+    <span class="spacer"></span>
+    <button type="button" class="ghost" id="math-button">Show the math</button>
+    <button type="button" class="ghost" id="data-button">Show the numbers</button>
+  </div>
+
+  <section class="card">
+    <div class="controls">
+      <div class="field">
+        <label for="x0-input">Initial state [x, y, heading, speed, steer]</label>
+        <input id="x0-input" type="text" value="[-3.0, 1.0, -0.2, 0.0, 0.0]" spellcheck="false" />
+      </div>
+      <div class="field narrow">
+        <label for="radius-input">Target radius</label>
+        <input id="radius-input" type="number" min="0" step="0.5" value="2" />
+      </div>
+      <div class="field narrow">
+        <label for="speed-input">Target speed</label>
+        <input id="speed-input" type="number" step="0.5" value="2" />
+      </div>
+      <div class="field narrow">
+        <label for="maxiter-input">Max iterations</label>
+        <input id="maxiter-input" type="number" min="1" step="1" value="50" />
+      </div>
+      <div class="field narrow">
+        <label for="horizon-input">Horizon N</label>
+        <input id="horizon-input" type="number" min="2" step="1" value="50" />
+      </div>
+      <div class="field narrow">
+        <label for="regu-input">Initial regu.</label>
+        <input id="regu-input" type="number" min="0" step="1" value="100" />
+      </div>
+      <button id="run-button" type="button">Run iLQR</button>
+      <span id="status-box"></span>
+    </div>
+    <div id="error-box" role="alert"></div>
+
+    <div class="slider-row">
+      <label for="iter-slider">Iteration</label>
+      <span class="ends">0</span>
+      <input id="iter-slider" type="range" min="0" max="50" value="0" step="1" disabled />
+      <span class="ends" id="slider-max">50</span>
+      <span class="iter-value" id="iter-readout">0</span>
+    </div>
+  </section>
+
+  <main class="charts">
+    <section class="card traj-card">
+      <div class="card-head">
+        <h2>Planned trajectory</h2>
+      </div>
+      <div class="chart-body" id="traj-plot"></div>
+      <div class="legend">
+        <span><i class="key circle"></i>Target circle</span>
+        <span><i class="key traj"></i>Planned trajectory</span>
+        <span><i class="key car"></i>Car body</span>
+      </div>
+    </section>
+
+    <div class="right-col">
+      <section class="card">
+        <div class="card-head">
+          <h2>Total cost</h2>
+          <span class="sub">per iteration · click to jump the slider</span>
+        </div>
+        <div class="chart-body" id="cost-plot"></div>
+      </section>
+      <section class="card">
+        <div class="card-head">
+          <h2>Acceleration u₀</h2>
+          <span class="sub">at the selected iteration</span>
+        </div>
+        <div class="chart-body" id="accel-plot"></div>
+      </section>
+      <section class="card">
+        <div class="card-head">
+          <h2>Steering velocity u₁</h2>
+          <span class="sub">at the selected iteration</span>
+        </div>
+        <div class="chart-body" id="steer-plot"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="math-panel" class="panel" role="dialog" aria-modal="true" aria-label="Problem definition">
+    <div class="panel-inner">
+      <div class="panel-head">
+        <h2>The problem</h2>
+        <span class="sub">what the solver on this page is optimising</span>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="math-close">Close</button>
+      </div>
+
+      <div class="math-scroll">
+        <section class="math-block">
+          <h3>Optimal control problem</h3>
+          <math display="block">
+            <mrow>
+              <munder><mi>min</mi><mrow><mi>u</mi><mo stretchy="false">[</mo><mo>&#x22C5;</mo><mo stretchy="false">]</mo></mrow></munder>
+              <mspace width="0.3em"/>
+              <mrow>
+                <msub><mi>&#x2113;</mi><mi>f</mi></msub>
+                <mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">[</mo><mi>N</mi><mo stretchy="false">]</mo><mo stretchy="false">)</mo>
+                <mo>+</mo>
+                <munderover>
+                  <mo>&#x2211;</mo>
+                  <mrow><mi>n</mi><mo>=</mo><mn>0</mn></mrow>
+                  <mrow><mi>N</mi><mo>&#x2212;</mo><mn>1</mn></mrow>
+                </munderover>
+                <mi>&#x2113;</mi><mo stretchy="false">(</mo>
+                <mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo>,</mo>
+                <mi>u</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo stretchy="false">)</mo>
+              </mrow>
+            </mrow>
+          </math>
+          <math display="block">
+            <mrow>
+              <mtext>subject to&#xA0;&#xA0;</mtext>
+              <mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false">]</mo>
+              <mo>=</mo>
+              <mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo>,</mo>
+              <mi>u</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo stretchy="false">)</mo>
+              <mo>,</mo><mspace width="1.2em"/>
+              <mi>x</mi><mo stretchy="false">[</mo><mn>0</mn><mo stretchy="false">]</mo><mo>=</mo>
+              <msub><mi>x</mi><mn>0</mn></msub>
+            </mrow>
+          </math>
+        </section>
+
+        <section class="math-block">
+          <h3>State and control</h3>
+          <math display="block">
+            <mrow>
+              <mi>x</mi><mo>=</mo>
+              <mrow>
+                <mo>[</mo>
+                <mtable>
+                  <mtr><mtd><mi>x</mi></mtd></mtr>
+                  <mtr><mtd><mi>y</mi></mtd></mtr>
+                  <mtr><mtd><mi>&#x3B8;</mi></mtd></mtr>
+                  <mtr><mtd><mi>v</mi></mtd></mtr>
+                  <mtr><mtd><mi>&#x3B4;</mi></mtd></mtr>
+                </mtable>
+                <mo>]</mo>
+              </mrow>
+              <mo>&#x2208;</mo>
+              <msup><mi>&#x211D;</mi><mn>5</mn></msup>
+              <mo>,</mo>
+              <mspace width="1.6em"/>
+              <mi>u</mi><mo>=</mo>
+              <mrow>
+                <mo>[</mo>
+                <mtable>
+                  <mtr><mtd><msub><mi>u</mi><mn>0</mn></msub></mtd></mtr>
+                  <mtr><mtd><msub><mi>u</mi><mn>1</mn></msub></mtd></mtr>
+                </mtable>
+                <mo>]</mo>
+              </mrow>
+              <mo>&#x2208;</mo>
+              <msup><mi>&#x211D;</mi><mn>2</mn></msup>
+            </mrow>
+          </math>
+          <ul class="legend-list">
+            <li><b>x, y</b> — position (m)</li>
+            <li><b>&#x3B8;</b> — heading (rad)</li>
+            <li><b>v</b> — speed (m/s)</li>
+            <li><b>&#x3B4;</b> — steering angle (rad)</li>
+            <li><b>u<sub>0</sub></b> — acceleration (m/s&#xB2;)</li>
+            <li><b>u<sub>1</sub></b> — steering velocity (rad/s)</li>
+          </ul>
+        </section>
+
+        <section class="math-block">
+          <h3>Nonlinear dynamics</h3>
+          <p class="note">Continuous time — a kinematic bicycle model, nonlinear in
+            <span class="mono">&#x3B8;</span>, <span class="mono">v</span> and
+            <span class="mono">&#x3B4;</span>:</p>
+          <math display="block">
+            <mrow>
+              <mover><mi>x</mi><mo>&#x2D9;</mo></mover>
+              <mo>=</mo>
+              <msub><mi>f</mi><mi>c</mi></msub>
+              <mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
+              <mo>=</mo>
+              <mrow>
+                <mo>[</mo>
+                <mtable>
+                  <mtr><mtd><mrow><mi>v</mi><mspace width="0.17em"/><mi>cos</mi><mspace width="0.12em"/><mi>&#x3B8;</mi></mrow></mtd></mtr>
+                  <mtr><mtd><mrow><mi>v</mi><mspace width="0.17em"/><mi>sin</mi><mspace width="0.12em"/><mi>&#x3B8;</mi></mrow></mtd></mtr>
+                  <mtr><mtd><mrow><mi>v</mi><mspace width="0.17em"/><mi>tan</mi><mspace width="0.12em"/><mi>&#x3B4;</mi></mrow></mtd></mtr>
+                  <mtr><mtd><msub><mi>u</mi><mn>0</mn></msub></mtd></mtr>
+                  <mtr><mtd><msub><mi>u</mi><mn>1</mn></msub></mtd></mtr>
+                </mtable>
+                <mo>]</mo>
+              </mrow>
+            </mrow>
+          </math>
+          <p class="note">Discretised with a forward Euler step, which is the
+            <span class="mono">f</span> the solver actually uses:</p>
+          <math display="block">
+            <mrow>
+              <mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false">]</mo>
+              <mo>=</mo>
+              <mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
+              <mo>=</mo>
+              <mi>x</mi><mo>+</mo>
+              <mi>&#x394;</mi><mi>t</mi>
+              <mo>&#x22C5;</mo>
+              <msub><mi>f</mi><mi>c</mi></msub>
+              <mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
+            </mrow>
+          </math>
+        </section>
+
+        <section class="math-block">
+          <h3>Stage cost</h3>
+          <math display="block">
+            <mrow>
+              <mi>&#x2113;</mi><mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
+              <mo>=</mo>
+              <msup>
+                <mrow>
+                  <mo stretchy="false">(</mo>
+                  <msqrt>
+                    <mrow>
+                      <msup><mi>x</mi><mn>2</mn></msup><mo>+</mo>
+                      <msup><mi>y</mi><mn>2</mn></msup><mo>+</mo>
+                      <mi>&#x3B5;</mi>
+                    </mrow>
+                  </msqrt>
+                  <mo>&#x2212;</mo><mi>r</mi>
+                  <mo stretchy="false">)</mo>
+                </mrow>
+                <mn>2</mn>
+              </msup>
+              <mo>+</mo>
+              <msup>
+                <mrow><mo stretchy="false">(</mo><mi>v</mi><mo>&#x2212;</mo>
+                  <msup><mi>v</mi><mo>&#x2605;</mo></msup><mo stretchy="false">)</mo></mrow>
+                <mn>2</mn>
+              </msup>
+              <mo>+</mo>
+              <mi>w</mi>
+              <mrow>
+                <mo stretchy="false">(</mo>
+                <msubsup><mi>u</mi><mn>0</mn><mn>2</mn></msubsup>
+                <mo>+</mo>
+                <msubsup><mi>u</mi><mn>1</mn><mn>2</mn></msubsup>
+                <mo stretchy="false">)</mo>
+              </mrow>
+            </mrow>
+          </math>
+          <ul class="term-list">
+            <li><span class="term-num">1</span> distance from the circle of radius <span class="mono">r</span>, squared</li>
+            <li><span class="term-num">2</span> deviation from the target speed, squared</li>
+            <li><span class="term-num">3</span> control effort, weighted by <span class="mono">w</span></li>
+          </ul>
+        </section>
+
+        <section class="math-block">
+          <h3>Final cost</h3>
+          <p class="note">The same, without the control term — there is no
+            <span class="mono">u</span>[<span class="mono">N</span>]:</p>
+          <math display="block">
+            <mrow>
+              <msub><mi>&#x2113;</mi><mi>f</mi></msub>
+              <mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo>
+              <mo>=</mo>
+              <msup>
+                <mrow>
+                  <mo stretchy="false">(</mo>
+                  <msqrt>
+                    <mrow>
+                      <msup><mi>x</mi><mn>2</mn></msup><mo>+</mo>
+                      <msup><mi>y</mi><mn>2</mn></msup><mo>+</mo>
+                      <mi>&#x3B5;</mi>
+                    </mrow>
+                  </msqrt>
+                  <mo>&#x2212;</mo><mi>r</mi>
+                  <mo stretchy="false">)</mo>
+                </mrow>
+                <mn>2</mn>
+              </msup>
+              <mo>+</mo>
+              <msup>
+                <mrow><mo stretchy="false">(</mo><mi>v</mi><mo>&#x2212;</mo>
+                  <msup><mi>v</mi><mo>&#x2605;</mo></msup><mo stretchy="false">)</mo></mrow>
+                <mn>2</mn>
+              </msup>
+            </mrow>
+          </math>
+        </section>
+
+        <section class="math-block">
+          <h3>Parameters in this run</h3>
+          <div class="param-grid" id="math-params"></div>
+          <p class="note">
+            <span class="mono">&#x3B5;</span> smooths the square root: the derivative of
+            <span class="mono">&#x221A;s</span> is undefined at <span class="mono">s = 0</span>,
+            which is exactly the origin of the circle cost.
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="data-panel" class="panel" role="dialog" aria-modal="true" aria-label="Solver data tables">
+    <div class="panel-inner">
+      <div class="panel-head">
+        <h2>The numbers</h2>
+        <span class="sub" id="panel-sub"></span>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="panel-close">Close</button>
+      </div>
+      <div class="tables">
+        <div class="table-scroll">
+          <h3>Cost trace (all iterations)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Iter</th>
+                <th scope="col">Total cost</th>
+                <th scope="col">Regu.</th>
+                <th scope="col">Redu. ratio</th>
+              </tr>
+            </thead>
+            <tbody id="trace-table-body"></tbody>
+          </table>
+        </div>
+        <div class="table-scroll">
+          <h3 id="traj-table-title">Trajectory at the selected iteration</h3>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">n</th>
+                <th scope="col">x</th>
+                <th scope="col">y</th>
+                <th scope="col">heading</th>
+                <th scope="col">speed</th>
+                <th scope="col">steer</th>
+                <th scope="col">u₀</th>
+                <th scope="col">u₁</th>
+              </tr>
+            </thead>
+            <tbody id="traj-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+<script src="dist/app.js"></script>
+</body>
+</html>
