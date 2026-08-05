@@ -200,29 +200,28 @@
     font-size: 11.5px; font-weight: 600; margin: 0 0 8px;
     color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;
   }
-  .math-block math { font-size: 16px; margin: 8px 0; color: var(--text-primary); }
-  .math-block math[display="block"] { overflow-x: auto; overflow-y: hidden; }
-  .math-block mtable { padding: 0 0.15em; }
+  /* MathJax renders to SVG that inherits currentColor, so it themes for free. */
+  .math-block mjx-container { color: var(--text-primary); font-size: 116%; }
+  .math-block mjx-container[display="true"] {
+    margin: 10px 0; overflow-x: auto; overflow-y: hidden;
+  }
+  .math-block .note mjx-container { font-size: 100%; }
   .math-block .note { font-size: 12px; color: var(--text-secondary); margin: 8px 0 4px; }
+
+  /* Hidden until MathJax has typeset, so raw \[ ... \] never flashes. */
+  .math-scroll { visibility: hidden; }
+  .math-scroll.ready { visibility: visible; }
   .mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.94em; color: var(--text-primary);
   }
 
-  .legend-list, .term-list {
+  .legend-list {
     list-style: none; margin: 8px 0 0; padding: 0;
     font-size: 12px; color: var(--text-secondary);
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px 16px;
   }
-  .legend-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px 16px; }
-  .legend-list b, .term-list b { color: var(--text-primary); font-weight: 600; }
-  .term-list li { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
-  .term-num {
-    flex: none;
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 16px; height: 16px; border-radius: 50%;
-    background: var(--plane); border: 1px solid var(--border);
-    font-size: 10px; color: var(--text-secondary);
-  }
+  .legend-list b { color: var(--text-primary); font-weight: 600; }
 
   .param-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -246,6 +245,14 @@
     .legend-list { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
+<script>
+  window.MathJax = {
+    tex: { displayMath: [['\\[', '\\]']], inlineMath: [['\\(', '\\)']] },
+    svg: { fontCache: 'global' },
+    options: { enableMenu: false }
+  };
+</script>
+<script id="MathJax-script" async src="vendor/mathjax/tex-svg.js"></script>
 </head>
 <body>
   <div class="topbar">
@@ -346,210 +353,57 @@
       <div class="math-scroll">
         <section class="math-block">
           <h3>Optimal control problem</h3>
-          <math display="block">
-            <mrow>
-              <munder><mi>min</mi><mrow><mi>u</mi><mo stretchy="false">[</mo><mo>&#x22C5;</mo><mo stretchy="false">]</mo></mrow></munder>
-              <mspace width="0.3em"/>
-              <mrow>
-                <msub><mi>&#x2113;</mi><mi>f</mi></msub>
-                <mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">[</mo><mi>N</mi><mo stretchy="false">]</mo><mo stretchy="false">)</mo>
-                <mo>+</mo>
-                <munderover>
-                  <mo>&#x2211;</mo>
-                  <mrow><mi>n</mi><mo>=</mo><mn>0</mn></mrow>
-                  <mrow><mi>N</mi><mo>&#x2212;</mo><mn>1</mn></mrow>
-                </munderover>
-                <mi>&#x2113;</mi><mo stretchy="false">(</mo>
-                <mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo>,</mo>
-                <mi>u</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo stretchy="false">)</mo>
-              </mrow>
-            </mrow>
-          </math>
-          <math display="block">
-            <mrow>
-              <mtext>subject to&#xA0;&#xA0;</mtext>
-              <mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false">]</mo>
-              <mo>=</mo>
-              <mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo>,</mo>
-              <mi>u</mi><mo stretchy="false">[</mo><mi>n</mi><mo stretchy="false">]</mo><mo stretchy="false">)</mo>
-              <mo>,</mo><mspace width="1.2em"/>
-              <mi>x</mi><mo stretchy="false">[</mo><mn>0</mn><mo stretchy="false">]</mo><mo>=</mo>
-              <msub><mi>x</mi><mn>0</mn></msub>
-            </mrow>
-          </math>
+          \[ \min_{u[\cdot]}\; \ell_f\big(x[N]\big) \;+\; \sum_{n=0}^{N-1} \ell\big(x[n],\, u[n]\big) \]
+          \[ \text{subject to}\quad x[n+1] = f\big(x[n],\, u[n]\big), \qquad x[0] = x_0 \]
         </section>
 
         <section class="math-block">
           <h3>State and control</h3>
-          <math display="block">
-            <mrow>
-              <mi>x</mi><mo>=</mo>
-              <mrow>
-                <mo>[</mo>
-                <mtable>
-                  <mtr><mtd><mi>x</mi></mtd></mtr>
-                  <mtr><mtd><mi>y</mi></mtd></mtr>
-                  <mtr><mtd><mi>&#x3B8;</mi></mtd></mtr>
-                  <mtr><mtd><mi>v</mi></mtd></mtr>
-                  <mtr><mtd><mi>&#x3B4;</mi></mtd></mtr>
-                </mtable>
-                <mo>]</mo>
-              </mrow>
-              <mo>&#x2208;</mo>
-              <msup><mi>&#x211D;</mi><mn>5</mn></msup>
-              <mo>,</mo>
-              <mspace width="1.6em"/>
-              <mi>u</mi><mo>=</mo>
-              <mrow>
-                <mo>[</mo>
-                <mtable>
-                  <mtr><mtd><msub><mi>u</mi><mn>0</mn></msub></mtd></mtr>
-                  <mtr><mtd><msub><mi>u</mi><mn>1</mn></msub></mtd></mtr>
-                </mtable>
-                <mo>]</mo>
-              </mrow>
-              <mo>&#x2208;</mo>
-              <msup><mi>&#x211D;</mi><mn>2</mn></msup>
-            </mrow>
-          </math>
+          \[ x = \begin{bmatrix} x \\ y \\ \theta \\ v \\ \delta \end{bmatrix} \in \mathbb{R}^5,
+             \qquad
+             u = \begin{bmatrix} u_0 \\ u_1 \end{bmatrix} \in \mathbb{R}^2 \]
           <ul class="legend-list">
-            <li><b>x, y</b> — position (m)</li>
-            <li><b>&#x3B8;</b> — heading (rad)</li>
-            <li><b>v</b> — speed (m/s)</li>
-            <li><b>&#x3B4;</b> — steering angle (rad)</li>
-            <li><b>u<sub>0</sub></b> — acceleration (m/s&#xB2;)</li>
-            <li><b>u<sub>1</sub></b> — steering velocity (rad/s)</li>
+            <li><b>x, y</b> &mdash; position (m)</li>
+            <li><b>&#x3B8;</b> &mdash; heading (rad)</li>
+            <li><b>v</b> &mdash; speed (m/s)</li>
+            <li><b>&#x3B4;</b> &mdash; steering angle (rad)</li>
+            <li><b>u<sub>0</sub></b> &mdash; acceleration (m/s&#xB2;)</li>
+            <li><b>u<sub>1</sub></b> &mdash; steering velocity (rad/s)</li>
           </ul>
         </section>
 
         <section class="math-block">
           <h3>Nonlinear dynamics</h3>
-          <p class="note">Continuous time — a kinematic bicycle model, nonlinear in
-            <span class="mono">&#x3B8;</span>, <span class="mono">v</span> and
-            <span class="mono">&#x3B4;</span>:</p>
-          <math display="block">
-            <mrow>
-              <mover><mi>x</mi><mo>&#x2D9;</mo></mover>
-              <mo>=</mo>
-              <msub><mi>f</mi><mi>c</mi></msub>
-              <mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
-              <mo>=</mo>
-              <mrow>
-                <mo>[</mo>
-                <mtable>
-                  <mtr><mtd><mrow><mi>v</mi><mspace width="0.17em"/><mi>cos</mi><mspace width="0.12em"/><mi>&#x3B8;</mi></mrow></mtd></mtr>
-                  <mtr><mtd><mrow><mi>v</mi><mspace width="0.17em"/><mi>sin</mi><mspace width="0.12em"/><mi>&#x3B8;</mi></mrow></mtd></mtr>
-                  <mtr><mtd><mrow><mi>v</mi><mspace width="0.17em"/><mi>tan</mi><mspace width="0.12em"/><mi>&#x3B4;</mi></mrow></mtd></mtr>
-                  <mtr><mtd><msub><mi>u</mi><mn>0</mn></msub></mtd></mtr>
-                  <mtr><mtd><msub><mi>u</mi><mn>1</mn></msub></mtd></mtr>
-                </mtable>
-                <mo>]</mo>
-              </mrow>
-            </mrow>
-          </math>
-          <p class="note">Discretised with a forward Euler step, which is the
-            <span class="mono">f</span> the solver actually uses:</p>
-          <math display="block">
-            <mrow>
-              <mi>x</mi><mo stretchy="false">[</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false">]</mo>
-              <mo>=</mo>
-              <mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
-              <mo>=</mo>
-              <mi>x</mi><mo>+</mo>
-              <mi>&#x394;</mi><mi>t</mi>
-              <mo>&#x22C5;</mo>
-              <msub><mi>f</mi><mi>c</mi></msub>
-              <mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
-            </mrow>
-          </math>
+          <p class="note">Continuous time &mdash; a kinematic bicycle model, nonlinear in
+            \(\theta\), \(v\) and \(\delta\):</p>
+          \[ \dot{x} \;=\; f_c(x, u) \;=\;
+             \begin{bmatrix} v\cos\theta \\ v\sin\theta \\ v\tan\delta \\ u_0 \\ u_1 \end{bmatrix} \]
+          <p class="note">Discretised with a forward Euler step, which is the \(f\)
+            the solver actually uses:</p>
+          \[ x[n+1] \;=\; f(x, u) \;=\; x + \Delta t \cdot f_c(x, u) \]
         </section>
 
         <section class="math-block">
           <h3>Stage cost</h3>
-          <math display="block">
-            <mrow>
-              <mi>&#x2113;</mi><mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo>
-              <mo>=</mo>
-              <msup>
-                <mrow>
-                  <mo stretchy="false">(</mo>
-                  <msqrt>
-                    <mrow>
-                      <msup><mi>x</mi><mn>2</mn></msup><mo>+</mo>
-                      <msup><mi>y</mi><mn>2</mn></msup><mo>+</mo>
-                      <mi>&#x3B5;</mi>
-                    </mrow>
-                  </msqrt>
-                  <mo>&#x2212;</mo><mi>r</mi>
-                  <mo stretchy="false">)</mo>
-                </mrow>
-                <mn>2</mn>
-              </msup>
-              <mo>+</mo>
-              <msup>
-                <mrow><mo stretchy="false">(</mo><mi>v</mi><mo>&#x2212;</mo>
-                  <msup><mi>v</mi><mo>&#x2605;</mo></msup><mo stretchy="false">)</mo></mrow>
-                <mn>2</mn>
-              </msup>
-              <mo>+</mo>
-              <mi>w</mi>
-              <mrow>
-                <mo stretchy="false">(</mo>
-                <msubsup><mi>u</mi><mn>0</mn><mn>2</mn></msubsup>
-                <mo>+</mo>
-                <msubsup><mi>u</mi><mn>1</mn><mn>2</mn></msubsup>
-                <mo stretchy="false">)</mo>
-              </mrow>
-            </mrow>
-          </math>
-          <ul class="term-list">
-            <li><span class="term-num">1</span> distance from the circle of radius <span class="mono">r</span>, squared</li>
-            <li><span class="term-num">2</span> deviation from the target speed, squared</li>
-            <li><span class="term-num">3</span> control effort, weighted by <span class="mono">w</span></li>
-          </ul>
+          \[ \ell(x, u) \;=\;
+             \underbrace{\left(\sqrt{x^2 + y^2 + \varepsilon} - r\right)^{2}}_{\text{distance from the circle}}
+             \;+\; \underbrace{\left(v - v^{\star}\right)^{2}}_{\text{speed error}}
+             \;+\; \underbrace{w\left(u_0^2 + u_1^2\right)}_{\text{control effort}} \]
         </section>
 
         <section class="math-block">
           <h3>Final cost</h3>
-          <p class="note">The same, without the control term — there is no
-            <span class="mono">u</span>[<span class="mono">N</span>]:</p>
-          <math display="block">
-            <mrow>
-              <msub><mi>&#x2113;</mi><mi>f</mi></msub>
-              <mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo>
-              <mo>=</mo>
-              <msup>
-                <mrow>
-                  <mo stretchy="false">(</mo>
-                  <msqrt>
-                    <mrow>
-                      <msup><mi>x</mi><mn>2</mn></msup><mo>+</mo>
-                      <msup><mi>y</mi><mn>2</mn></msup><mo>+</mo>
-                      <mi>&#x3B5;</mi>
-                    </mrow>
-                  </msqrt>
-                  <mo>&#x2212;</mo><mi>r</mi>
-                  <mo stretchy="false">)</mo>
-                </mrow>
-                <mn>2</mn>
-              </msup>
-              <mo>+</mo>
-              <msup>
-                <mrow><mo stretchy="false">(</mo><mi>v</mi><mo>&#x2212;</mo>
-                  <msup><mi>v</mi><mo>&#x2605;</mo></msup><mo stretchy="false">)</mo></mrow>
-                <mn>2</mn>
-              </msup>
-            </mrow>
-          </math>
+          <p class="note">The same, without the control term &mdash; there is no \(u[N]\):</p>
+          \[ \ell_f(x) \;=\; \left(\sqrt{x^2 + y^2 + \varepsilon} - r\right)^{2}
+             \;+\; \left(v - v^{\star}\right)^{2} \]
         </section>
 
         <section class="math-block">
           <h3>Parameters in this run</h3>
           <div class="param-grid" id="math-params"></div>
           <p class="note">
-            <span class="mono">&#x3B5;</span> smooths the square root: the derivative of
-            <span class="mono">&#x221A;s</span> is undefined at <span class="mono">s = 0</span>,
-            which is exactly the origin of the circle cost.
+            \(\varepsilon\) smooths the square root: the derivative of \(\sqrt{s}\)
+            is undefined at \(s = 0\), which is exactly the origin of the circle cost.
           </p>
         </section>
       </div>

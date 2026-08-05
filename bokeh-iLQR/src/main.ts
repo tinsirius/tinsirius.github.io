@@ -341,6 +341,20 @@ function fillMathParams(): void {
   }
 }
 
+/**
+ * Reveal the formulas once MathJax has typeset them. The timeout is a fallback:
+ * if MathJax is missing the LaTeX source shows rather than nothing at all.
+ */
+function revealMath(): void {
+  const scroll = document.querySelector(".math-scroll");
+  if (scroll) scroll.classList.add("ready");
+}
+const mathJax = (window as any).MathJax;
+if (mathJax && mathJax.startup && mathJax.startup.promise) {
+  mathJax.startup.promise.then(revealMath);
+}
+window.setTimeout(revealMath, 3000);
+
 mathButton.addEventListener("click", function () {
   fillMathParams();
   mathPanel.classList.add("visible");
