@@ -38,6 +38,10 @@
 }
 
 *{box-sizing:border-box}
+/* The page is laid out for a 1920x1080 slide and shrunk as a whole on smaller
+   screens; the inline script below sets --zoom. Viewport units are not
+   compensated by zoom, so anything sized in vh divides by it. */
+html{zoom:var(--zoom,1)}
 body{
   background:var(--page); color:var(--ink);
   font-family:var(--ff-body); font-size:14px; line-height:1.5;
@@ -285,7 +289,7 @@ footer code{font-family:var(--ff-mono); font-size:11px; color:var(--ink-2)}
    whatever height is left over. */
 .charts{display:contents}
 body.fit{overflow:hidden; margin:0}
-.fit .app{max-width:none; height:100vh; padding:12px 14px; gap:10px; overflow:hidden}
+.fit .app{max-width:none; height:calc(100vh / var(--zoom,1)); padding:12px 14px; gap:10px; overflow:hidden}
 .fit .top,
 .fit #cardTable,
 .fit footer{display:none}
@@ -336,34 +340,9 @@ body.fit{overflow:hidden; margin:0}
 .fit .rail-foot .mt{padding:8px 11px 9px}
 .fit .rail-foot .mt .v{font-size:16px}
 
-@media (max-width:1500px){
-  .fit .grid{grid-template-columns:minmax(0,1fr) 400px}
-  .fit .rail-body{column-gap:8px}
-  .fit .rail-body>*{margin-bottom:8px}
-  .fit .grp{padding:8px 10px 4px}
-}
-/* Height, not width, is what the rail runs out of. Below a full 1080 the group
-   notes are what gives — whoever is presenting already knows the fields. */
-@media (max-height:1000px){
-  .fit .grp>p{display:none}
-  .fit .f{padding:3px 0 4px}
-  .fit .rail-body{column-gap:8px}
-  .fit .rail-body>*{margin-bottom:8px}
-  .fit .grp{padding:8px 10px 4px}
-  .fit .rail-foot{padding:10px; gap:10px; margin-top:8px}
-  .fit .rail-foot .mt{padding:6px 10px 7px}
-  .fit .rail-foot .mt .v{font-size:15px}
-  .fit .grp>h3{margin-bottom:1px}
-  .fit .f-top{margin-bottom:2px}
-}
-@media (max-height:820px){
-  .fit .grp{padding:7px 10px 3px}
-  .fit .grp>h3{margin-bottom:0}
-  .fit .f{padding:2px 0 3px}
-  .fit .rail-foot{padding:9px; gap:9px; margin-top:8px}
-  .fit .rail-foot .mt{padding:6px 9px 7px}
-  .fit .transport{padding:4px 12px 6px}
-}
+/* Nothing squeezes below 1080: a smaller screen gets the same layout at a
+   smaller zoom (see the script below), so 1280x720 is exactly two thirds of
+   1920x1080. */
 
 /* ---------- light / dark toggle ----------
    Fixed to the bottom-right corner, above everything, small enough to sit in
@@ -397,6 +376,15 @@ body.fit{overflow:hidden; margin:0}
 /* Same key as ui/theme.ts. Applied before first paint so a remembered dark
    choice does not flash light while the bundle loads. Light is the default. */
 try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.dataset.theme="dark"}catch(e){}
+/* Design size is 1920x1080. Smaller viewports show the same page scaled down
+   to fit, never up: a 1080p screen is unchanged and 1280x720 is 2/3 scale. */
+(function(){
+  var fit=function(){
+    var z=Math.min(innerWidth/1920,innerHeight/1080,1);
+    document.documentElement.style.setProperty("--zoom",z.toFixed(4));
+  };
+  fit(); addEventListener("resize",fit);
+})();
 </script>
 </head>
 <body>
@@ -997,7 +985,8 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
     onMove(e) {
       const r = this.svg.getBoundingClientRect();
       const g = this.geom;
-      const frac = (e.clientX - r.left - g.x0) / g.w;
+      const x = (e.clientX - r.left) * (this.svg.width.baseVal.value / r.width);
+      const frac = (x - g.x0) / g.w;
       if (frac < -0.02 || frac > 1.02) {
         this.emit(null);
         return;
@@ -1469,11 +1458,12 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const r = this.canvas.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) return;
-      this.w = r.width;
-      this.h = r.height;
+      this.w = this.canvas.clientWidth;
+      this.h = this.canvas.clientHeight;
+      const scale = dpr * r.width / this.w;
       this.canvas.width = Math.round(r.width * dpr);
       this.canvas.height = Math.round(r.height * dpr);
-      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
       this.render();
     }
     setFrame(f) {
