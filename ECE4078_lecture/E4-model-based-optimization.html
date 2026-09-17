@@ -478,7 +478,7 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
 
       <div class="card" id="cardT">
         <div class="card-hd">
-          <h2>Commanded torque</h2><span class="unit">N&middot;m &middot; zero-order held between controller ticks</span>
+          <h2>Commanded torque</h2><span class="unit">N&middot;m</span>
           <div class="legend" id="legendT"></div>
         </div>
         <div class="plot-host" id="plotT"></div>
@@ -5166,8 +5166,9 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
   }
   var queue = null;
   function typeset(el) {
-    if (typeof MathJax === "undefined") return;
+    if (typeof MathJax === "undefined") return Promise.resolve();
     queue = (queue ?? MathJax.startup.promise).then(() => MathJax.typesetPromise([el])).catch((e) => console.warn("MathJax:", e));
+    return queue;
   }
   function plain(html) {
     const d = document.createElement("div");
@@ -5264,7 +5265,9 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
         }
         this.root.appendChild(el);
       }
-      typeset(this.root);
+      typeset(this.root).then(() => {
+        for (const cb of this.renderCbs) cb();
+      });
       for (const key of Object.keys(this.values)) if (!live.has(key)) delete this.values[key];
       for (const cb of this.renderCbs) cb();
     }
@@ -5703,7 +5706,7 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
       }
       if (f.runs && f.runs.length > 0) {
         const all = [{ token: f.jointTokens[0], caption: f.caption ?? "" }, ...f.runs];
-        this.label(`${all.length} runs \xB7 one robot, different q\u2080`, 14, h - 16, T.ink2, "left");
+        this.label(`${all.length} runs \xB7 one robot, different q\u2080${f.note ? ` \xB7 ${f.note}` : ""}`, 14, h - 16, T.ink2, "left");
         let x = 14;
         for (const run of all) {
           ctx.fillStyle = this.resolve(run.token);
@@ -6929,7 +6932,7 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
           note: "\\(J = \\int_0^\\infty e^\\top Q_p e + \\dot e^\\top Q_d \\dot e + u^\\top R u \\; dt\\)",
           params: withDefaults([
             { kind: "vector", key: "qp", label: "Weight \\(Q_p\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(1600), min: new Array(robot.nv).fill(0) },
-            { kind: "vector", key: "qd", label: "Weight \\(Q_d\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(0), min: new Array(robot.nv).fill(0) },
+            { kind: "vector", key: "qd", label: "Weight \\(Q_d\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(10), min: new Array(robot.nv).fill(0) },
             { kind: "vector", key: "r", label: "Weight \\(R\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(1), min: new Array(robot.nv).fill(1e-9) }
           ]),
           buttons: [{ key: "lqr", label: "Compute Kp, Kd" }]
@@ -7083,6 +7086,12 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
     }
     function tile(name, sym, id, dot2) {
       return `<div class="ro"><span class="k">${dot2 ? `<span class="dot" style="background:${dot2}"></span>` : ""}${name} <span class="sym">${sym}</span></span><span class="v" id="${id}">\u2014</span></div>`;
+    }
+    function glueNote() {
+      if (!glueEnabled) return void 0;
+      const held = asVec(rail.get().glueMax, robot.nv).map((s, i) => s > 0 ? robot.joints[i].symbol : null).filter((x) => !!x);
+      if (held.length === 0) return void 0;
+      return held.length === robot.nv ? "all joints glued" : `${held.join(", ")} glued`;
     }
     const runName = (q0) => `${robot.nv === 1 ? Math.round(q0[0] * DEG) : `[${q0.map((x) => Math.round(x * DEG)).join(", ")}]`}\xB0`;
     function buildLegends() {
@@ -7541,6 +7550,7 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
         gravity: asNum(p.g ?? 10),
         horizon: !!lab2.plan,
         caption: several ? `q\u2080 = ${runName(q0)}` : void 0,
+        note: glueNote(),
         runs: several ? starts.slice(1).map((q, k) => ({
           points: robot.frames(q),
           q,
@@ -7587,6 +7597,7 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
         planar?.setFrame({
           runs,
           caption: multiRun() ? `q\u2080 = ${runName(r.traj[0].q)}` : void 0,
+          note: glueNote(),
           gravity: asNum(rail.get().g ?? 10),
           horizon: !!lab2.plan,
           human: s.human,

@@ -478,7 +478,7 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
 
       <div class="card" id="cardT">
         <div class="card-hd">
-          <h2>Commanded torque</h2><span class="unit">N&middot;m &middot; zero-order held between controller ticks</span>
+          <h2>Commanded torque</h2><span class="unit">N&middot;m</span>
           <div class="legend" id="legendT"></div>
         </div>
         <div class="plot-host" id="plotT"></div>
@@ -1066,13 +1066,14 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
     title: "Panda Control Lab",
     eyebrow: "ECE4078 \xB7 Lab 3 \xB7 Seven degrees of freedom",
     heading: "The same controllers on a real robot",
-    viewportNote: "drag to orbit \xB7 scroll to zoom \xB7 the translucent arm is the target pose",
+    viewportNote: "",
     robots: [createPanda()],
     // A Franka's torque loop runs at 1 kHz. It is not a nicety: at the 100 Hz
     // that suits a pendulum, PD gains of this size make the light wrist joints
     // numerically unstable long before they make the arm move.
     paramDefaults: { controllerHz: 1e3, simHz: 2e3, duration: 4 },
     controllers: [pdController, gravityCompensatedPdController, computedTorqueController],
+    lqr: true,
     footer: "Kinematics and joint limits are parsed from the Panda URDF at build time. The inertias are the identified parameters from Gaz et al. (RA-L 2019) rather than the URDF's own, which are placeholders \u2014 every link there carries the same fictitious diagonal tensor. Everything past joint 7 (the flange, the hand and both fingers, frozen shut) is lumped into link 7 by the parallel-axis theorem, so this is a true 7-DoF chain with a correctly weighted wrist. M(q), C(q,q\u0307)q\u0307 and g(q) all come from one recursive Newton\u2013Euler sweep, validated against the closed-form two-link model to 1e-15. Try PD first: it sags visibly, because holding the elbow up takes 22 N\xB7m of gravity torque and a K<sub>p</sub> of 40 only produces that at 31\xB0 of error."
   };
 
@@ -1995,8 +1996,9 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
   }
   var queue = null;
   function typeset(el) {
-    if (typeof MathJax === "undefined") return;
+    if (typeof MathJax === "undefined") return Promise.resolve();
     queue = (queue ?? MathJax.startup.promise).then(() => MathJax.typesetPromise([el])).catch((e) => console.warn("MathJax:", e));
+    return queue;
   }
   function plain(html) {
     const d = document.createElement("div");
@@ -2093,7 +2095,9 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
         }
         this.root.appendChild(el);
       }
-      typeset(this.root);
+      typeset(this.root).then(() => {
+        for (const cb of this.renderCbs) cb();
+      });
       for (const key of Object.keys(this.values)) if (!live.has(key)) delete this.values[key];
       for (const cb of this.renderCbs) cb();
     }
@@ -2532,7 +2536,7 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
       }
       if (f.runs && f.runs.length > 0) {
         const all = [{ token: f.jointTokens[0], caption: f.caption ?? "" }, ...f.runs];
-        this.label(`${all.length} runs \xB7 one robot, different q\u2080`, 14, h - 16, T.ink2, "left");
+        this.label(`${all.length} runs \xB7 one robot, different q\u2080${f.note ? ` \xB7 ${f.note}` : ""}`, 14, h - 16, T.ink2, "left");
         let x = 14;
         for (const run of all) {
           ctx.fillStyle = this.resolve(run.token);
@@ -3758,7 +3762,7 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
           note: "\\(J = \\int_0^\\infty e^\\top Q_p e + \\dot e^\\top Q_d \\dot e + u^\\top R u \\; dt\\)",
           params: withDefaults([
             { kind: "vector", key: "qp", label: "Weight \\(Q_p\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(1600), min: new Array(robot.nv).fill(0) },
-            { kind: "vector", key: "qd", label: "Weight \\(Q_d\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(0), min: new Array(robot.nv).fill(0) },
+            { kind: "vector", key: "qd", label: "Weight \\(Q_d\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(10), min: new Array(robot.nv).fill(0) },
             { kind: "vector", key: "r", label: "Weight \\(R\\)", unit: "", length: robot.nv, value: new Array(robot.nv).fill(1), min: new Array(robot.nv).fill(1e-9) }
           ]),
           buttons: [{ key: "lqr", label: "Compute Kp, Kd" }]
@@ -3912,6 +3916,12 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
     }
     function tile(name, sym, id, dot2) {
       return `<div class="ro"><span class="k">${dot2 ? `<span class="dot" style="background:${dot2}"></span>` : ""}${name} <span class="sym">${sym}</span></span><span class="v" id="${id}">\u2014</span></div>`;
+    }
+    function glueNote() {
+      if (!glueEnabled) return void 0;
+      const held = asVec(rail.get().glueMax, robot.nv).map((s, i) => s > 0 ? robot.joints[i].symbol : null).filter((x) => !!x);
+      if (held.length === 0) return void 0;
+      return held.length === robot.nv ? "all joints glued" : `${held.join(", ")} glued`;
     }
     const runName = (q0) => `${robot.nv === 1 ? Math.round(q0[0] * DEG) : `[${q0.map((x) => Math.round(x * DEG)).join(", ")}]`}\xB0`;
     function buildLegends() {
@@ -4370,6 +4380,7 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
         gravity: asNum(p.g ?? 10),
         horizon: !!lab2.plan,
         caption: several ? `q\u2080 = ${runName(q0)}` : void 0,
+        note: glueNote(),
         runs: several ? starts.slice(1).map((q, k) => ({
           points: robot.frames(q),
           q,
@@ -4416,6 +4427,7 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
         planar?.setFrame({
           runs,
           caption: multiRun() ? `q\u2080 = ${runName(r.traj[0].q)}` : void 0,
+          note: glueNote(),
           gravity: asNum(rail.get().g ?? 10),
           horizon: !!lab2.plan,
           human: s.human,
