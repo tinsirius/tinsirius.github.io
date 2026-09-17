@@ -3466,8 +3466,9 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
             ...nominal ? [{ key: "band", label: "Rubber band on the end-effector", checked: bandEnabled }] : []
           ],
           params: withDefaults([
-            {
-              // Typed rather than slid: `[[30], [60]]` runs once from each.
+            // One joint slides its start angle; several are typed, and so is a
+            // list of starts (`[[30], [60]]` runs once from each) given by URL.
+            robot.nv === 1 && !(queryValues.get("qinit") ?? "").trim().startsWith("[[") ? angle("qinit", "Initial angle \\(q_0\\)", robot.defaults.home.slice(0, robot.nv)) : {
               kind: "vector",
               key: "qinit",
               label: "Initial angle \\(q_0\\)",
@@ -4194,13 +4195,19 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
     }
     rail.onRender(fitRail);
     window.addEventListener("resize", fitRail);
+    let rerun;
     rail.onChange(() => {
-      setNotice("Parameters changed \u2014 press Simulate");
       if (!result) {
         liveQDes = null;
         showRest();
       }
       drawPlan();
+      if (autorun) {
+        window.clearTimeout(rerun);
+        rerun = window.setTimeout(run, 80);
+        return;
+      }
+      setNotice("Parameters changed \u2014 press Simulate");
     });
     rail.onButton((key) => {
       if (key === "collect") {
