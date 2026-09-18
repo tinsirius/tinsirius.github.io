@@ -974,29 +974,6 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
     }
   };
 
-  // src/controllers/gravityCompensatedPd.ts
-  var gravityCompensatedPdController = {
-    id: "pd-gravity",
-    name: "PD + gravity comp.",
-    // `?highlight=gq` marks the compensation term, the one thing PD lacks.
-    summary: ({ highlight }) => {
-      const pd = "\\(\\tau = K_p(q_d - q) + K_d(\\dot q_d - \\dot q)";
-      return highlight.has("gq") ? `${pd}\\) ${hlTerm("\\(+\\, g(q)\\)")}.` : `${pd} + g(q)\\).`;
-    },
-    params: [
-      { key: "kp", label: "Gain \\(K_p\\)", unit: "N&middot;m/rad", min: 0, max: 400, step: 1, value: 40 },
-      { key: "kd", label: "Gain \\(K_d\\)", unit: "N&middot;m&middot;s/rad", min: 0, max: 60, step: 0.1, value: 6 }
-    ],
-    control(u) {
-      const gravityTorque = u.model.gravity(u.q);
-      const tau = new Array(u.model.nv).fill(0);
-      for (let i = 0; i < u.model.nv; i++) {
-        tau[i] = u.gains.kp[i] * (u.qDes[i] - u.q[i]) + u.gains.kd[i] * (u.vDes[i] - u.v[i]) + gravityTorque[i];
-      }
-      return tau;
-    }
-  };
-
   // src/core/dynamics.ts
   function rnea(model, q, v, a) {
     const inertial = matVec(model.crba(q), a);
@@ -1072,7 +1049,8 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
     // that suits a pendulum, PD gains of this size make the light wrist joints
     // numerically unstable long before they make the arm move.
     paramDefaults: { controllerHz: 1e3, simHz: 2e3, duration: 4 },
-    controllers: [pdController, gravityCompensatedPdController, computedTorqueController],
+    controllers: [pdController, computedTorqueController],
+    terms: true,
     lqr: true,
     footer: "Kinematics and joint limits are parsed from the Panda URDF at build time. The inertias are the identified parameters from Gaz et al. (RA-L 2019) rather than the URDF's own, which are placeholders \u2014 every link there carries the same fictitious diagonal tensor. Everything past joint 7 (the flange, the hand and both fingers, frozen shut) is lumped into link 7 by the parallel-axis theorem, so this is a true 7-DoF chain with a correctly weighted wrist. M(q), C(q,q\u0307)q\u0307 and g(q) all come from one recursive Newton\u2013Euler sweep, validated against the closed-form two-link model to 1e-15. Try PD first: it sags visibly, because holding the elbow up takes 22 N\xB7m of gravity torque and a K<sub>p</sub> of 40 only produces that at 31\xB0 of error."
   };
@@ -1128,6 +1106,45 @@ try{if(localStorage.getItem("ece4078-theme")==="dark")document.documentElement.d
     return { kp: qp.map((_, i) => K[i][i]), kd: qp.map((_, i) => K[i][n + i]) };
   }
   var diag = (v) => v.map((x, i) => v.map((_, j) => i === j ? x : 0));
+
+  // src/controllers/pdTerms.ts
+  var allTerms = (t) => t.gravity && t.coriolis && t.inertia;
+  function pdWithTerms(terms) {
+    return {
+      id: "pd",
+      name: "PD",
+      // `?highlight=mq,cq,gq` marks a term, as on the full computed-torque law.
+      summary: ({ highlight }) => {
+        const mark = (key, tex2) => highlight.has(key) ? hlTerm(`\\(${tex2}\\)`) : `\\(${tex2}\\)`;
+        const pd = terms.inertia ? `\\(\\tau = \\)${mark("mq", "M(q)")}\\(\\,\\big(K_p(q_d - q) + K_d(\\dot q_d - \\dot q)\\big)\\)` : "\\(\\tau = K_p(q_d - q) + K_d(\\dot q_d - \\dot q)\\)";
+        const c = terms.coriolis ? ` ${mark("cq", "+\\, C(q, \\dot q)\\dot q")}` : "";
+        const g = terms.gravity ? ` ${mark("gq", "+\\, g(q)")}` : "";
+        return `${pd}${c}${g}.`;
+      },
+      params: [
+        { key: "kp", label: "Gain \\(K_p\\)", unit: "N&middot;m/rad", min: 0, max: 400, step: 1, value: 40 },
+        { key: "kd", label: "Gain \\(K_d\\)", unit: "N&middot;m&middot;s/rad", min: 0, max: 60, step: 0.1, value: 6 }
+      ],
+      control(u) {
+        const nv = u.model.nv;
+        const pd = new Array(nv).fill(0);
+        for (let i = 0; i < nv; i++) {
+          pd[i] = u.gains.kp[i] * (u.qDes[i] - u.q[i]) + u.gains.kd[i] * (u.vDes[i] - u.v[i]);
+        }
+        const tau = terms.inertia ? matVec(u.model.crba(u.q), pd) : pd;
+        if (terms.coriolis || terms.gravity) {
+          const still = new Array(nv).fill(0);
+          const atRest = u.model.nle(u.q, still);
+          const moving = terms.coriolis ? u.model.nle(u.q, u.v) : atRest;
+          for (let i = 0; i < nv; i++) {
+            if (terms.coriolis) tau[i] += moving[i] - atRest[i];
+            if (terms.gravity) tau[i] += atRest[i];
+          }
+        }
+        return tau;
+      }
+    };
+  }
 
   // src/core/spline.ts
   function naturalCubicSpline(ys, h) {
@@ -3526,6 +3543,19 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
     const queryValues = valuesByQuery();
     robot = lab2.robots.find((r) => r.id === queryValues.get("robot")) ?? robot;
     controller = lab2.controllers.find((c) => c.id === queryValues.get("controller")) ?? controller;
+    const terms = {
+      gravity: queryFlag(queryValues.get("gravity")) ?? false,
+      coriolis: queryFlag(queryValues.get("coriolis")) ?? false,
+      inertia: queryFlag(queryValues.get("inertia")) ?? false
+    };
+    function controllerForTerms() {
+      if (allTerms(terms)) return lab2.controllers.find((c) => c.id === "computed-torque") ?? pdWithTerms(terms);
+      return pdWithTerms(terms);
+    }
+    if (lab2.terms) {
+      if (controller.id === "computed-torque") terms.gravity = terms.coriolis = terms.inertia = true;
+      controller = controllerForTerms();
+    }
     let planar = null;
     let spatial = null;
     let spatialFor = "";
@@ -3719,7 +3749,14 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
           title: "Controller",
           note: summary,
           picker: lab2.controllers.length > 1 ? { kind: "controller", label: "Control law", selected: controller.id, options: lab2.controllers.map((c) => ({ id: c.id, name: c.name })) } : void 0,
-          toggles: nominal ? [{ key: "learned", label: "Add the learned feed-forward", checked: learnedEnabled }] : [],
+          toggles: [
+            ...lab2.terms ? [
+              { key: "gravity", label: "Add gravity \\(g(q)\\)", checked: terms.gravity },
+              { key: "coriolis", label: "Add Coriolis \\(C(q,\\dot q)\\dot q\\)", checked: terms.coriolis },
+              { key: "inertia", label: "Multiply by inertia \\(M(q)\\)", checked: terms.inertia }
+            ] : [],
+            ...nominal ? [{ key: "learned", label: "Add the learned feed-forward", checked: learnedEnabled }] : []
+          ],
           params: withDefaults([
             { key: "controllerHz", label: "Controller rate", unit: "Hz", min: 1, max: 4e3, step: 1, value: 100 },
             ...gains,
@@ -4611,6 +4648,14 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
         learnedEnabled = on;
         if (on && !fit) setNotice("No fit yet \u2014 collect runs and train first; the tick applies once there is one");
         return;
+      } else if (lab2.terms && (key === "gravity" || key === "coriolis" || key === "inertia")) {
+        terms[key] = on;
+        controller = controllerForTerms();
+        rail.render(buildGroups());
+        buildLegends();
+        buildCharts();
+        refresh();
+        return;
       } else {
         return;
       }
@@ -4637,6 +4682,11 @@ void main() { gl_FragColor = vec4(uColor, uAlpha); }`;
         const next = lab2.controllers.find((c) => c.id === id);
         if (!next || next === controller) return;
         controller = next;
+        if (lab2.terms) {
+          const all = next.id === "computed-torque";
+          terms.gravity = terms.coriolis = terms.inertia = all;
+          controller = controllerForTerms();
+        }
       }
       rail.render(buildGroups());
       buildViewport();
